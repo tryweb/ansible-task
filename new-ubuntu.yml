@@ -1,0 +1,25 @@
+- hosts: all
+  become: true
+  become_user: root
+  tasks:
+    - name: Update apt repo and cache on all Debian/Ubuntu boxes
+      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+
+    - name: install snmpd package
+      apt:
+        update_cache: yes
+        name:
+          - snmpd
+        state: present
+
+    - name: copy snmpd config file
+      copy:
+        src: /tmp/snmpd.conf
+        dest: /etc/snmp/snmpd.conf
+        #remote_src: yes
+        #validate: /usr/sbin/visudo -csf %s
+
+    - name: Enable snmp service
+      action: service name=snmpd state=restarted
+      #service: name=snmpd enabled=yes
+      #notify: Restart snmpd
