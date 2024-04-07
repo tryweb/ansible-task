@@ -1,0 +1,19 @@
+- hosts: all
+  become: yes
+  become_user: root
+  tasks:
+    - name: Update apk repo and cache on all Alpine boxes
+      apk: update_cache=yes cache_valid_time=3600
+
+#    - name: Ansible apt to install multiple packages
+#      register: updatesys
+#      apt:
+#        update_cache: yes
+#        name:
+#          - snmp
+#          - libsasl2-modules
+#          - qemu-guest-agent
+#        state: present
+        
+    - name: Upgrade all packages on servers
+      apk: upgrade=yes
