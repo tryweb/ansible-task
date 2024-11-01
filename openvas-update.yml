@@ -1,0 +1,30 @@
+- name: Execute Docker Compose operations on remote host
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Stop and remove containers
+      community.docker.docker_compose:
+        project_src: /root  # docker-compose.yml 
+        state: absent
+
+    - name: Remove OpenVAS log file
+      file:
+        path: /var/lib/docker/volumes/root_openvas_log_data_vol/_data/openvas.log
+        state: absent
+
+    - name: Pull latest Docker images
+      community.docker.docker_compose:
+        project_src: /root  # docker-compose.yml 
+        pull: yes
+
+    - name: Start Docker Compose services
+      community.docker.docker_compose:
+        project_src: /root  # docker-compose.yml 
+        state: present
+
+    - name: Prune Docker images
+      community.docker.docker_prune:
+        images: yes
+        images_filters:
+          dangling: false
