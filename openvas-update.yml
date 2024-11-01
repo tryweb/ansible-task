@@ -3,13 +3,25 @@
   become: yes
 
   tasks:
+    - name: Install pip
+      ansible.builtin.package:
+        name: python3-pip
+        state: present
+
+    - name: Install required Python modules
+      ansible.builtin.pip:
+        name:
+          - requests
+          - docker
+        state: present
+
     - name: Stop and remove containers
       community.docker.docker_compose:
         project_src: /root  # docker-compose.yml 
         state: absent
 
     - name: Remove OpenVAS log file
-      file:
+      ansible.builtin.file:
         path: /var/lib/docker/volumes/root_openvas_log_data_vol/_data/openvas.log
         state: absent
 
