@@ -7,18 +7,13 @@
       community.general.apk:
         update_cache: yes
 
-    - name: Install Python3 and pip
+    - name: Install required packages
       community.general.apk:
         name:
           - python3
           - py3-pip
-        state: present
-
-    - name: Install required Python modules
-      ansible.builtin.pip:
-        name:
-          - requests
-          - docker
+          - py3-requests
+          - py3-docker
         state: present
 
     - name: Stop and remove containers
