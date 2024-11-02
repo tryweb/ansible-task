@@ -1,5 +1,5 @@
 - name: Execute Docker Compose operations on remote host
-  hosts: all
+  hosts: your_target_hosts
   become: yes
 
   vars:
@@ -10,14 +10,17 @@
       community.general.apk:
         update_cache: yes
 
-    - name: Install required packages
+    - name: Install required system packages
       community.general.apk:
         name:
           - python3
           - py3-pip
           - py3-virtualenv
           - docker-cli
-          - docker-compose
+          - yaml-dev
+          - gcc
+          - musl-dev
+          - python3-dev
         state: present
 
     - name: Create virtual environment
@@ -25,17 +28,23 @@
         cmd: python3 -m venv {{ venv_path }}
         creates: "{{ venv_path }}"
 
-    - name: Install docker module in virtual environment
+    - name: Upgrade pip in virtual environment
+      ansible.builtin.pip:
+        name: pip
+        state: latest
+        virtualenv: "{{ venv_path }}"
+
+    - name: Install docker and docker-compose modules in virtual environment
       ansible.builtin.pip:
         name: 
           - docker
-          - docker-compose
+          - docker-compose<2.0.0
         virtualenv: "{{ venv_path }}"
         state: present
 
     - name: Stop and remove containers
       community.docker.docker_compose:
-        project_src: /root  # docker-compose.yml 
+        project_src: /root
         state: absent
       environment:
         PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
@@ -47,14 +56,14 @@
 
     - name: Pull latest Docker images
       community.docker.docker_compose:
-        project_src: /root  # docker-compose.yml 
+        project_src: /root
         pull: yes
       environment:
         PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
 
     - name: Start Docker Compose services
       community.docker.docker_compose:
-        project_src: /root  # docker-compose.yml 
+        project_src: /root
         state: present
       environment:
         PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
