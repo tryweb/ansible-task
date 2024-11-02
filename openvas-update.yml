@@ -1,5 +1,5 @@
 - name: Execute Docker Compose operations on remote host
-  hosts: your_target_hosts
+  hosts: all
   become: yes
 
   vars:
