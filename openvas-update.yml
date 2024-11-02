@@ -15,7 +15,7 @@
         name:
           - python3
           - py3-pip
-          - py3-requests
+          - py3-virtualenv
           - docker-cli
           - docker-compose
         state: present
@@ -27,7 +27,9 @@
 
     - name: Install docker module in virtual environment
       ansible.builtin.pip:
-        name: docker
+        name: 
+          - docker
+          - docker-compose
         virtualenv: "{{ venv_path }}"
         state: present
 
