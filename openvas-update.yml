@@ -3,32 +3,10 @@
   hosts: all
   become: yes
 
-  vars:
-    docker_compose_version: "1.29.2"
-    docker_compose_path: "/usr/local/bin/docker-compose"
-
   tasks:
-    - name: Update package cache
-      community.general.apk:
-        update_cache: yes
-
-    - name: Install required system packages
-      community.general.apk:
-        name:
-          - python3
-          - py3-pip
-          - docker-cli
-        state: present
-
-    - name: Download Docker Compose
-      ansible.builtin.get_url:
-        url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-Linux-x86_64"
-        dest: "{{ docker_compose_path }}"
-        mode: '0755'
-
     - name: Stop and remove containers
       ansible.builtin.command:
-        cmd: "{{ docker_compose_path }} -f /root/docker-compose.yml down"
+        cmd: docker compose -f /root/docker-compose.yml down
       ignore_errors: yes
 
     - name: Remove OpenVAS log file
@@ -38,11 +16,11 @@
 
     - name: Pull latest Docker images
       ansible.builtin.command:
-        cmd: "{{ docker_compose_path }} -f /root/docker-compose.yml pull"
+        cmd: docker compose -f /root/docker-compose.yml pull
 
     - name: Start Docker Compose services
       ansible.builtin.command:
-        cmd: "{{ docker_compose_path }} -f /root/docker-compose.yml up -d"
+        cmd: docker compose -f /root/docker-compose.yml up -d
 
     - name: Prune Docker images
       ansible.builtin.command:
