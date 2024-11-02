@@ -1,9 +1,11 @@
+---
 - name: Execute Docker Compose operations on remote host
   hosts: all
   become: yes
 
   vars:
-    venv_path: /root/ansible_venv
+    docker_compose_version: "1.29.2"
+    docker_compose_path: "/usr/local/bin/docker-compose"
 
   tasks:
     - name: Update package cache
@@ -15,42 +17,19 @@
         name:
           - python3
           - py3-pip
-          - py3-virtualenv
           - docker-cli
-          - py3-yaml
         state: present
 
-    - name: Create virtual environment
-      ansible.builtin.command:
-        cmd: python3 -m venv {{ venv_path }}
-        creates: "{{ venv_path }}"
-
-    - name: Upgrade pip in virtual environment
-      ansible.builtin.pip:
-        name: pip
-        state: latest
-        virtualenv: "{{ venv_path }}"
-
-    - name: Install PyYAML in virtual environment
-      ansible.builtin.pip:
-        name: PyYAML
-        virtualenv: "{{ venv_path }}"
-        state: present
-
-    - name: Install docker and docker-compose modules in virtual environment
-      ansible.builtin.pip:
-        name: 
-          - docker
-          - docker-compose<2.0.0
-        virtualenv: "{{ venv_path }}"
-        state: present
+    - name: Download Docker Compose
+      ansible.builtin.get_url:
+        url: "https://github.com/docker/compose/releases/download/{{ docker_compose_version }}/docker-compose-Linux-x86_64"
+        dest: "{{ docker_compose_path }}"
+        mode: '0755'
 
     - name: Stop and remove containers
-      community.docker.docker_compose:
-        project_src: /root
-        state: absent
-      environment:
-        PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
+      ansible.builtin.command:
+        cmd: "{{ docker_compose_path }} -f /root/docker-compose.yml down"
+      ignore_errors: yes
 
     - name: Remove OpenVAS log file
       ansible.builtin.file:
@@ -58,23 +37,13 @@
         state: absent
 
     - name: Pull latest Docker images
-      community.docker.docker_compose:
-        project_src: /root
-        pull: yes
-      environment:
-        PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
+      ansible.builtin.command:
+        cmd: "{{ docker_compose_path }} -f /root/docker-compose.yml pull"
 
     - name: Start Docker Compose services
-      community.docker.docker_compose:
-        project_src: /root
-        state: present
-      environment:
-        PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
+      ansible.builtin.command:
+        cmd: "{{ docker_compose_path }} -f /root/docker-compose.yml up -d"
 
     - name: Prune Docker images
-      community.docker.docker_prune:
-        images: yes
-        images_filters:
-          dangling: false
-      environment:
-        PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
+      ansible.builtin.command:
+        cmd: docker image prune -f
