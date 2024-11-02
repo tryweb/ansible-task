@@ -2,6 +2,9 @@
   hosts: all
   become: yes
 
+  vars:
+    venv_path: /root/ansible_venv
+
   tasks:
     - name: Update package cache
       community.general.apk:
@@ -17,10 +20,23 @@
           - docker-compose
         state: present
 
+    - name: Create virtual environment
+      ansible.builtin.command:
+        cmd: python3 -m venv {{ venv_path }}
+        creates: "{{ venv_path }}"
+
+    - name: Install docker module in virtual environment
+      ansible.builtin.pip:
+        name: docker
+        virtualenv: "{{ venv_path }}"
+        state: present
+
     - name: Stop and remove containers
       community.docker.docker_compose:
         project_src: /root  # docker-compose.yml 
         state: absent
+      environment:
+        PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
 
     - name: Remove OpenVAS log file
       ansible.builtin.file:
@@ -31,14 +47,20 @@
       community.docker.docker_compose:
         project_src: /root  # docker-compose.yml 
         pull: yes
+      environment:
+        PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
 
     - name: Start Docker Compose services
       community.docker.docker_compose:
         project_src: /root  # docker-compose.yml 
         state: present
+      environment:
+        PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
 
     - name: Prune Docker images
       community.docker.docker_prune:
         images: yes
         images_filters:
           dangling: false
+      environment:
+        PYTHONPATH: "{{ venv_path }}/lib/python3.12/site-packages:$PYTHONPATH"
