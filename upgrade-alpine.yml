@@ -20,27 +20,17 @@
       ignore_unreachable: yes
       ignore_errors: yes
 
-    # 判斷主機狀態
+    # 判斷主機狀態（移除多餘空格）
     - name: 判斷主機狀態
       set_fact:
         host_status: >-
-          {% if update_result.unreachable is defined and update_result.unreachable %}
-          unreachable
-          {% elif upgrade_result.unreachable is defined and upgrade_result.unreachable %}
-          unreachable
-          {% elif update_result.failed is defined and update_result.failed %}
-          failed
-          {% elif upgrade_result.failed is defined and upgrade_result.failed %}
-          failed
-          {% else %}
-          success
-          {% endif %}
+          {% if update_result.unreachable is defined and update_result.unreachable %}unreachable{% elif upgrade_result.unreachable is defined and upgrade_result.unreachable %}unreachable{% elif update_result.failed is defined and update_result.failed %}failed{% elif upgrade_result.failed is defined and upgrade_result.failed %}failed{% else %}success{% endif %}
 
-    # 記錄狀態 - 關鍵修正：使用 inventory_hostname 而非 ansible_hostname
+    # 記錄狀態（注意：使用 trim 移除空格）
     - name: 記錄主機狀態到檔案
       lineinfile:
         path: /tmp/ansible_run_status.txt
-        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status }}"
+        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status | trim }}"
         create: yes
       delegate_to: localhost
       become: no
@@ -52,7 +42,36 @@
     discord_webhook: "{{ discord_webhook_url }}"
   
   tasks:
-    - name: 讀取狀態檔案
+    - name: 檢查並記錄 unreachable 主機
+      block:
+        - name: 取得所有應該執行的主機
+          set_fact:
+            expected_hosts: "{{ groups['all'] }}"
+        
+        - name: 讀取已記錄的主機
+          shell: "cat /tmp/ansible_run_status.txt 2>/dev/null | cut -d'|' -f2 || echo ''"
+          register: recorded_hosts_raw
+          changed_when: false
+          become: no
+
+        - name: 解析已記錄的主機清單
+          set_fact:
+            recorded_hosts: "{{ recorded_hosts_raw.stdout_lines }}"
+
+        - name: 找出未記錄的主機（unreachable）
+          set_fact:
+            unreachable_hosts: "{{ expected_hosts | difference(recorded_hosts) }}"
+
+        - name: 為 unreachable 主機補充記錄
+          lineinfile:
+            path: /tmp/ansible_run_status.txt
+            line: "{{ ansible_date_time.iso8601 }}|{{ item }}|unreachable"
+            create: yes
+          loop: "{{ unreachable_hosts }}"
+          when: unreachable_hosts | length > 0
+          become: no
+
+    - name: 讀取完整狀態檔案
       shell: "cat /tmp/ansible_run_status.txt 2>/dev/null || echo ''"
       register: status_content
       changed_when: false
@@ -62,7 +81,7 @@
       set_fact:
         all_status: "{{ status_content.stdout_lines | map('split', '|') | list }}"
         
-    - name: 分類主機（修正：正確識別失敗主機）
+    - name: 分類主機
       set_fact:
         success_hosts: "{{ all_status | selectattr('2', 'equalto', 'success') | list }}"
         failed_hosts: "{{ all_status | rejectattr('2', 'equalto', 'success') | list }}"
@@ -70,10 +89,11 @@
     - name: Debug - 顯示狀態資訊
       debug:
         msg:
-          - "總主機數: {{ all_status | length }}"
+          - "總主機數: {{ groups['all'] | length }}"
+          - "記錄主機數: {{ all_status | length }}"
           - "成功: {{ success_hosts | length }}"
           - "失敗: {{ failed_hosts | length }}"
-          - "失敗主機詳情: {{ failed_hosts }}"
+          - "失敗主機: {{ failed_hosts | map(attribute='1') | list }}"
 
     - name: 發送成功通知
       uri:
@@ -84,7 +104,7 @@
           content: "✅ **Alpine 系統更新完成**"
           embeds:
             - title: "Ansible 執行成功"
-              description: "所有 {{ all_status | length }} 台主機已完成系統更新"
+              description: "所有 {{ groups['all'] | length }} 台主機已完成系統更新"
               color: 3066993
               fields:
                 - name: "✅ 成功主機"
@@ -101,7 +121,7 @@
       when: failed_hosts | length == 0
       become: no
 
-    - name: 發送失敗通知（修正：只顯示失敗主機）
+    - name: 發送失敗通知
       uri:
         url: "{{ discord_webhook }}"
         method: POST
@@ -128,5 +148,5 @@
 
     - name: 標記任務失敗
       fail:
-        msg: "{{ failed_hosts | length }} 台主機更新失敗"
+        msg: "{{ failed_hosts | length }} 台主機更新失敗: {{ failed_hosts | map(attribute='1') | join(', ') }}"
       when: failed_hosts | length > 0
