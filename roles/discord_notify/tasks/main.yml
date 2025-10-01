@@ -1,0 +1,16 @@
+---
+- name: 發送 Discord 通知
+  uri:
+    url: "{{ discord_webhook_url }}"
+    method: POST
+    body_format: json
+    body:
+      content: "{{ discord_message }}"
+      embeds:
+        - title: "{{ discord_title }}"
+          description: "{{ discord_description }}"
+          color: "{{ discord_color | default(3447003) }}"
+          fields: "{{ discord_fields | default([]) }}"
+          timestamp: "{{ ansible_date_time.iso8601 }}"
+    status_code: 204
+  delegate_to: localhost

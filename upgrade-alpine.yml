@@ -1,6 +1,14 @@
 - hosts: all
   become: yes
   become_user: root
+  roles:
+    - role: discord_notify
+      vars:
+        discord_webhook_url: "YOUR_WEBHOOK_URL"
+        discord_message: "部署開始"
+        discord_title: "Ansible 執行"
+        discord_description: "正在執行部署任務"
+      tags: notify
   tasks:
     - name: Update apk repo and cache on all Alpine boxes
       apk: update_cache=yes
