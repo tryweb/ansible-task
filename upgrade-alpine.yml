@@ -3,43 +3,110 @@
   become_user: root
   vars:
     discord_webhook: "{{ discord_webhook_url }}"
-
+  
   tasks:
-    - block:
-        - name: Update apk repo and cache on all Alpine boxes
-          apk: update_cache=yes
+    - name: Update apk repo and cache on all Alpine boxes
+      apk: update_cache=yes
+      register: update_result
+      ignore_errors: yes
 
-        - name: Upgrade all packages on servers
-          apk: upgrade=yes
+    - name: Upgrade all packages on servers
+      apk: upgrade=yes
+      register: upgrade_result
+      ignore_errors: yes
 
-      always:
-        # 無論成功失敗都會執行
-        - name: 檢查是否有失敗
-          set_fact:
-            has_failures: "{{ ansible_play_hosts | length != ansible_play_hosts_all | length or ansible_failed_result is defined }}"
-          run_once: true
-          delegate_to: localhost
+    # 記錄本機狀態
+    - name: 記錄主機執行狀態
+      set_fact:
+        host_status:
+          hostname: "{{ inventory_hostname }}"
+          ip: "{{ ansible_host | default(inventory_hostname) }}"
+          update_status: "{{ 'success' if update_result is succeeded else 'failed' }}"
+          upgrade_status: "{{ 'success' if upgrade_result is succeeded else 'failed' }}"
+          is_failed: "{{ update_result is failed or upgrade_result is failed }}"
 
-        - name: 發送成功通知
-          include_role:
-            name: discord_notify
-          vars:
-            discord_webhook_url: "{{ discord_webhook }}"
-            discord_message: "✅ Alpine 系統更新完成"
-            discord_title: "Ansible 執行成功"
-            discord_description: "所有 {{ ansible_play_hosts | length }} 台主機已完成系統更新"
-            discord_color: 3066993
-          when: not (has_failures | default(false))
-          run_once: true
+- hosts: localhost
+  gather_facts: no
+  vars:
+    discord_webhook: "{{ discord_webhook_url }}"
+  
+  tasks:
+    - name: 收集所有主機狀態
+      set_fact:
+        all_hosts_status: "{{ groups['all'] | map('extract', hostvars, 'host_status') | list }}"
+        failed_hosts: "{{ groups['all'] | map('extract', hostvars, 'host_status') | selectattr('is_failed', 'equalto', true) | list }}"
+        success_hosts: "{{ groups['all'] | map('extract', hostvars, 'host_status') | rejectattr('is_failed', 'equalto', true) | list }}"
 
-        - name: 發送失敗通知
-          include_role:
-            name: discord_notify
-          vars:
-            discord_webhook_url: "{{ discord_webhook }}"
-            discord_message: "❌ Alpine 系統更新失敗"
-            discord_title: "Ansible 執行失敗"
-            discord_description: "部分主機更新失敗，請檢查 Semaphore 日誌"
-            discord_color: 15158332
-          when: has_failures | default(false)
-          run_once: true
+    - name: 發送成功通知
+      uri:
+        url: "{{ discord_webhook }}"
+        method: POST
+        body_format: json
+        body:
+          content: "✅ **Alpine 系統更新完成**"
+          embeds:
+            - title: "Ansible 執行成功"
+              description: "所有 {{ groups['all'] | length }} 台主機已完成系統更新"
+              color: 3066993
+              fields:
+                - name: "✅ 成功主機"
+                  value: "{{ success_hosts | length }} 台"
+                  inline: true
+                - name: "⏱️ 執行時間"
+                  value: "{{ ansible_date_time.time }}"
+                  inline: true
+                - name: "📅 執行日期"
+                  value: "{{ ansible_date_time.date }}"
+                  inline: true
+              timestamp: "{{ ansible_date_time.iso8601 }}"
+        status_code: 204
+      when: failed_hosts | length == 0
+      become: no
+
+    - name: 發送失敗通知
+      uri:
+        url: "{{ discord_webhook }}"
+        method: POST
+        body_format: json
+        body:
+          content: "@here ❌ **Alpine 系統更新失敗**"
+          embeds:
+            - title: "Ansible 執行失敗報告"
+              description: "{{ failed_hosts | length }} 台主機在系統更新時發生錯誤"
+              color: 15158332
+              fields:
+                - name: "📊 執行統計"
+                  value: |
+                    ✅ 成功: {{ success_hosts | length }} 台
+                    ❌ 失敗: {{ failed_hosts | length }} 台
+                    📦 總計: {{ groups['all'] | length }} 台
+                  inline: false
+                - name: "❌ 失敗主機清單"
+                  value: |
+                    {% for host in failed_hosts %}
+                    • **{{ host.hostname }}** ({{ host.ip }})
+                      └─ Update: {{ host.update_status }} | Upgrade: {{ host.upgrade_status }}
+                    {% endfor %}
+                  inline: false
+                - name: "✅ 成功主機清單"
+                  value: |
+                    {% if success_hosts | length > 0 %}
+                    {% for host in success_hosts %}
+                    • {{ host.hostname }}
+                    {% endfor %}
+                    {% else %}
+                    無
+                    {% endif %}
+                  inline: false
+                - name: "⏱️ 執行時間"
+                  value: "{{ ansible_date_time.iso8601 }}"
+                  inline: true
+              timestamp: "{{ ansible_date_time.iso8601 }}"
+        status_code: 204
+      when: failed_hosts | length > 0
+      become: no
+
+    - name: 如果有失敗則標記任務失敗
+      fail:
+        msg: "{{ failed_hosts | length }} 台主機更新失敗"
+      when: failed_hosts | length > 0
