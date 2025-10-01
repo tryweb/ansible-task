@@ -2,6 +2,9 @@
 - name: Execute Docker Compose operations on remote host
   hosts: all
   become: yes
+  vars:
+    discord_webhook: "{{ discord_webhook_url }}"
+  gather_facts: yes
 
   tasks:
     - name: Stop and remove containers
@@ -25,3 +28,29 @@
     - name: Prune Docker images
       ansible.builtin.command:
         cmd: docker image prune -f
+
+    # 判斷主機狀態（移除多餘空格）
+    - name: 判斷主機狀態
+      set_fact:
+        host_status: >-
+          {% if update_result.unreachable is defined and update_result.unreachable %}unreachable{% elif upgrade_result.unreachable is defined and upgrade_result.unreachable %}unreachable{% elif update_result.failed is defined and update_result.failed %}failed{% elif upgrade_result.failed is defined and upgrade_result.failed %}failed{% else %}success{% endif %}
+
+    # 記錄狀態（注意：使用 trim 移除空格）
+    - name: 記錄主機狀態到檔案
+      lineinfile:
+        path: /tmp/ansible_run_status.txt
+        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status | trim }}"
+        create: yes
+      delegate_to: localhost
+      become: no
+
+- hosts: localhost
+  connection: local
+  gather_facts: yes
+  vars:
+    discord_webhook: "{{ discord_webhook_url }}"
+  
+  roles:
+    - role: update_notifier
+      vars:
+        notification_title: "OpenVAS"
