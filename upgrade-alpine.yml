@@ -3,29 +3,43 @@
   become_user: root
   vars:
     discord_webhook: "{{ discord_webhook_url }}"
+
   tasks:
-    - name: Update apk repo and cache on all Alpine boxes
-      apk: update_cache=yes
+    - block:
+        - name: Update apk repo and cache on all Alpine boxes
+          apk: update_cache=yes
 
-#    - name: Ansible apt to install multiple packages
-#      register: updatesys
-#      apt:
-#        update_cache: yes
-#        name:
-#          - snmp
-#          - libsasl2-modules
-#          - qemu-guest-agent
-#        state: present
-        
-    - name: Upgrade all packages on servers
-      apk: upgrade=yes
+        - name: Upgrade all packages on servers
+          apk: upgrade=yes
 
-    - name: 發送成功通知
-      include_role:
-        name: discord_notify
-      vars:
-        discord_webhook_url: "{{ discord_webhook }}"
-        discord_message: "✅ Alpine 系統更新完成"
-        discord_title: "Ansible 執行成功"
-        discord_description: "所有 Alpine 主機已完成系統更新"
-        discord_color: 3066993
+      always:
+        # 無論成功失敗都會執行
+        - name: 檢查是否有失敗
+          set_fact:
+            has_failures: "{{ ansible_play_hosts | length != ansible_play_hosts_all | length or ansible_failed_result is defined }}"
+          run_once: true
+          delegate_to: localhost
+
+        - name: 發送成功通知
+          include_role:
+            name: discord_notify
+          vars:
+            discord_webhook_url: "{{ discord_webhook }}"
+            discord_message: "✅ Alpine 系統更新完成"
+            discord_title: "Ansible 執行成功"
+            discord_description: "所有 {{ ansible_play_hosts | length }} 台主機已完成系統更新"
+            discord_color: 3066993
+          when: not (has_failures | default(false))
+          run_once: true
+
+        - name: 發送失敗通知
+          include_role:
+            name: discord_notify
+          vars:
+            discord_webhook_url: "{{ discord_webhook }}"
+            discord_message: "❌ Alpine 系統更新失敗"
+            discord_title: "Ansible 執行失敗"
+            discord_description: "部分主機更新失敗，請檢查 Semaphore 日誌"
+            discord_color: 15158332
+          when: has_failures | default(false)
+          run_once: true
