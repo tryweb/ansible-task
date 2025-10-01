@@ -1,30 +1,41 @@
 - hosts: all
-  name: "Play 1: 在所有 Alpine 主機上執行更新"
+  name: "Play 1: 在所有 Alpine 主機上執行更新並收集狀態"
   become: yes
   become_user: root
-  gather_facts: no # 第一階段通常不需要 facts，可加速執行
+  gather_facts: no
 
   tasks:
-    - name: 更新 APK 套件庫索引
-      ansible.builtin.apk:
-        update_cache: yes
-      register: update_result
-      ignore_unreachable: yes
-      ignore_errors: yes
+    - name: 執行更新並定義主機狀態
+      block:
+        - name: 更新 APK 套件庫索引
+          ansible.builtin.apk:
+            update_cache: yes
+        
+        - name: 升級所有已安裝的套件
+          ansible.builtin.apk:
+            upgrade: yes
 
-    - name: 升級所有已安裝的套件
-      ansible.builtin.apk:
-        upgrade: yes
-      register: upgrade_result
+        # 如果上面兩個任務都成功，設定狀態為 success
+        - name: 設定主機狀態為 'success'
+          ansible.builtin.set_fact:
+            host_status: 'success'
+      
+      rescue:
+        # 如果 block 中有任何任務失敗，設定狀態為 failed
+        - name: 設定主機狀態為 'failed'
+          ansible.builtin.set_fact:
+            host_status: 'failed'
+      
+      # ignore_unreachable: yes 會讓無法連線的主機跳過 block/rescue
+      # 我們會在 Play 2 中處理這些主機
       ignore_unreachable: yes
       ignore_errors: yes
 
 - hosts: localhost
   name: "Play 2: 彙總結果並發送 Discord 通知"
   connection: local
-  gather_facts: no # 此 Play 僅處理變數，不需要 facts
+  gather_facts: no
   vars:
-    # 確保 discord_webhook_url 變數已定義 (可來自 inventory, extra-vars, etc.)
     discord_webhook: "{{ discord_webhook_url }}"
   
   tasks:
@@ -35,15 +46,15 @@
           {% set results = {'success': [], 'failed': [], 'unreachable': []} %}
           {% for host in groups['all'] %}
             {% set host_vars = hostvars[host] %}
-            {% if host_vars.update_result is not defined or (host_vars.update_result.unreachable | default(false)) %}
-              {% set _ = results.unreachable.append(host) %}
-            {% elif (host_vars.update_result.failed | default(false)) or (host_vars.upgrade_result.failed | default(false)) %}
+            {% if host_vars.host_status is defined and host_vars.host_status == 'success' %}
+              {% set _ = results.success.append(host) %}
+            {% elif host_vars.host_status is defined and host_vars.host_status == 'failed' %}
               {% set _ = results.failed.append(host) %}
             {% else %}
-              {% set _ = results.success.append(host) %}
+              {% set _ = results.unreachable.append(host) %}
             {% endif %}
           {% endfor %}
-          {{ results }}
+          {{ results | to_json }} # <--- 關鍵修正：確保輸出為可解析的 JSON
           
     - name: 顯示狀態統計結果 (Debug)
       run_once: true
