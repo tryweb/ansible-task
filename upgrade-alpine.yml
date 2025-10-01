@@ -15,27 +15,51 @@
       register: upgrade_result
       ignore_errors: yes
 
-    # 記錄本機狀態
-    - name: 記錄主機執行狀態
-      set_fact:
-        host_status:
-          hostname: "{{ inventory_hostname }}"
-          ip: "{{ ansible_host | default(inventory_hostname) }}"
-          update_status: "{{ 'success' if update_result is succeeded else 'failed' }}"
-          upgrade_status: "{{ 'success' if upgrade_result is succeeded else 'failed' }}"
-          is_failed: "{{ update_result is failed or upgrade_result is failed }}"
+    # 將狀態寫入臨時檔案
+    - name: 記錄主機狀態
+      copy:
+        content: |
+          {{ inventory_hostname }}|{{ ansible_host | default(inventory_hostname) }}|{{ 'failed' if (update_result.failed | default(false) or upgrade_result.failed | default(false)) else 'success' }}
+        dest: "/tmp/ansible_status_{{ inventory_hostname }}.txt"
+      delegate_to: localhost
+      become: no
 
 - hosts: localhost
-  gather_facts: no
+  connection: local
+  gather_facts: yes
   vars:
     discord_webhook: "{{ discord_webhook_url }}"
   
   tasks:
-    - name: 收集所有主機狀態
+    - name: 讀取所有主機狀態檔案
+      shell: "cat /tmp/ansible_status_*.txt 2>/dev/null || echo ''"
+      register: all_status_raw
+      changed_when: false
+      become: no
+
+    - name: 解析主機狀態
       set_fact:
-        all_hosts_status: "{{ groups['all'] | map('extract', hostvars, 'host_status') | list }}"
-        failed_hosts: "{{ groups['all'] | map('extract', hostvars, 'host_status') | selectattr('is_failed', 'equalto', true) | list }}"
-        success_hosts: "{{ groups['all'] | map('extract', hostvars, 'host_status') | rejectattr('is_failed', 'equalto', true) | list }}"
+        all_hosts_parsed: "{{ all_status_raw.stdout_lines | map('split', '|') | list }}"
+
+    - name: 建立失敗主機清單
+      set_fact:
+        failed_hosts_info: |
+          {% set failed = [] %}
+          {% for host_info in all_hosts_parsed %}
+          {% if host_info | length == 3 and host_info[2] == 'failed' %}
+          {% set _ = failed.append({'hostname': host_info[0], 'ip': host_info[1]}) %}
+          {% endif %}
+          {% endfor %}
+          {{ failed }}
+
+    - name: 轉換為清單格式
+      set_fact:
+        failed_hosts: "{{ failed_hosts_info | from_yaml }}"
+        total_hosts: "{{ all_hosts_parsed | length }}"
+
+    - name: 計算成功主機數
+      set_fact:
+        success_count: "{{ total_hosts | int - failed_hosts | length }}"
 
     - name: 發送成功通知
       uri:
@@ -46,11 +70,11 @@
           content: "✅ **Alpine 系統更新完成**"
           embeds:
             - title: "Ansible 執行成功"
-              description: "所有 {{ groups['all'] | length }} 台主機已完成系統更新"
+              description: "所有 {{ total_hosts }} 台主機已完成系統更新"
               color: 3066993
               fields:
                 - name: "✅ 成功主機"
-                  value: "{{ success_hosts | length }} 台"
+                  value: "{{ success_count }} 台"
                   inline: true
                 - name: "⏱️ 執行時間"
                   value: "{{ ansible_date_time.time }}"
@@ -77,26 +101,15 @@
               fields:
                 - name: "📊 執行統計"
                   value: |
-                    ✅ 成功: {{ success_hosts | length }} 台
+                    ✅ 成功: {{ success_count }} 台
                     ❌ 失敗: {{ failed_hosts | length }} 台
-                    📦 總計: {{ groups['all'] | length }} 台
+                    📦 總計: {{ total_hosts }} 台
                   inline: false
                 - name: "❌ 失敗主機清單"
                   value: |
                     {% for host in failed_hosts %}
                     • **{{ host.hostname }}** ({{ host.ip }})
-                      └─ Update: {{ host.update_status }} | Upgrade: {{ host.upgrade_status }}
                     {% endfor %}
-                  inline: false
-                - name: "✅ 成功主機清單"
-                  value: |
-                    {% if success_hosts | length > 0 %}
-                    {% for host in success_hosts %}
-                    • {{ host.hostname }}
-                    {% endfor %}
-                    {% else %}
-                    無
-                    {% endif %}
                   inline: false
                 - name: "⏱️ 執行時間"
                   value: "{{ ansible_date_time.iso8601 }}"
@@ -104,6 +117,13 @@
               timestamp: "{{ ansible_date_time.iso8601 }}"
         status_code: 204
       when: failed_hosts | length > 0
+      become: no
+
+    - name: 清理臨時檔案
+      file:
+        path: "/tmp/ansible_status_{{ item }}.txt"
+        state: absent
+      loop: "{{ groups['all'] }}"
       become: no
 
     - name: 如果有失敗則標記任務失敗
