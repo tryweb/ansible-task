@@ -27,4 +27,3 @@
         discord_title: "Ansible 執行成功"
         discord_description: "所有主機部署完成"
         discord_color: 3066993
-      become: no  # 這裡也要加上

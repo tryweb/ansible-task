@@ -14,5 +14,5 @@
           timestamp: "{{ ansible_date_time.iso8601 }}"
     status_code: 204
   delegate_to: localhost
-  become: no  # 關鍵：禁用 sudo
-  run_once: true  # 建議：只執行一次，避免重複通知
+  become: no
+  run_once: true
