@@ -1,129 +1,152 @@
 - hosts: all
-  name: "Play 1: 在所有 Alpine 主機上執行更新並收集狀態"
   become: yes
   become_user: root
-  gather_facts: no
-
+  vars:
+    discord_webhook: "{{ discord_webhook_url }}"
+  gather_facts: yes
+  
   tasks:
-    - name: 執行更新並定義主機狀態
-      block:
-        - name: 更新 APK 套件庫索引
-          ansible.builtin.apk:
-            update_cache: yes
-        
-        - name: 升級所有已安裝的套件
-          ansible.builtin.apk:
-            upgrade: yes
-
-        - name: 設定主機狀態為 'success'
-          ansible.builtin.set_fact:
-            host_status: 'success'
-      
-      rescue:
-        - name: 設定主機狀態為 'failed'
-          ansible.builtin.set_fact:
-            host_status: 'failed'
-      
+    - name: Update apk repo and cache on all Alpine boxes
+      apk: 
+        update_cache: yes
+      register: update_result
       ignore_unreachable: yes
       ignore_errors: yes
 
+    - name: Upgrade all packages on servers
+      apk: 
+        upgrade: yes
+      register: upgrade_result
+      ignore_unreachable: yes
+      ignore_errors: yes
+
+    # 判斷主機狀態（移除多餘空格）
+    - name: 判斷主機狀態
+      set_fact:
+        host_status: >-
+          {% if update_result.unreachable is defined and update_result.unreachable %}unreachable{% elif upgrade_result.unreachable is defined and upgrade_result.unreachable %}unreachable{% elif update_result.failed is defined and update_result.failed %}failed{% elif upgrade_result.failed is defined and upgrade_result.failed %}failed{% else %}success{% endif %}
+
+    # 記錄狀態（注意：使用 trim 移除空格）
+    - name: 記錄主機狀態到檔案
+      lineinfile:
+        path: /tmp/ansible_run_status.txt
+        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status | trim }}"
+        create: yes
+      delegate_to: localhost
+      become: no
+
 - hosts: localhost
-  name: "Play 2: 彙總結果並發送 Discord 通知"
   connection: local
-  gather_facts: yes # <-- 關鍵修正：從 no 改為 yes
+  gather_facts: yes
   vars:
     discord_webhook: "{{ discord_webhook_url }}"
   
   tasks:
-    - name: 彙總所有主機的執行狀態
-      run_once: true
-      ansible.builtin.set_fact:
-        all_hosts_status: >
-          {%- set results = {'success': [], 'failed': [], 'unreachable': []} -%}
-          {%- for host in groups['all'] -%}
-            {%- set host_vars = hostvars[host] -%}
-            {%- if host_vars.host_status is defined and host_vars.host_status == 'success' -%}
-              {%- set _ = results.success.append(host) -%}
-            {%- elif host_vars.host_status is defined and host_vars.host_status == 'failed' -%}
-              {%- set _ = results.failed.append(host) -%}
-            {%- else -%}
-              {%- set _ = results.unreachable.append(host) -%}
-            {%- endif -%}
-          {%- endfor -%}
-          {{ results | to_json | from_json }}
-          
-    - name: 顯示狀態統計結果 (Debug)
-      run_once: true
-      ansible.builtin.debug:
+    - name: 檢查並記錄 unreachable 主機
+      block:
+        - name: 取得所有應該執行的主機
+          set_fact:
+            expected_hosts: "{{ groups['all'] }}"
+        
+        - name: 讀取已記錄的主機
+          shell: "cat /tmp/ansible_run_status.txt 2>/dev/null | cut -d'|' -f2 || echo ''"
+          register: recorded_hosts_raw
+          changed_when: false
+          become: no
+
+        - name: 解析已記錄的主機清單
+          set_fact:
+            recorded_hosts: "{{ recorded_hosts_raw.stdout_lines }}"
+
+        - name: 找出未記錄的主機（unreachable）
+          set_fact:
+            unreachable_hosts: "{{ expected_hosts | difference(recorded_hosts) }}"
+
+        - name: 為 unreachable 主機補充記錄
+          lineinfile:
+            path: /tmp/ansible_run_status.txt
+            line: "{{ ansible_date_time.iso8601 }}|{{ item }}|unreachable"
+            create: yes
+          loop: "{{ unreachable_hosts }}"
+          when: unreachable_hosts | length > 0
+          become: no
+
+    - name: 讀取完整狀態檔案
+      shell: "cat /tmp/ansible_run_status.txt 2>/dev/null || echo ''"
+      register: status_content
+      changed_when: false
+      become: no
+
+    - name: 解析狀態
+      set_fact:
+        all_status: "{{ status_content.stdout_lines | map('split', '|') | list }}"
+        
+    - name: 分類主機
+      set_fact:
+        success_hosts: "{{ all_status | selectattr('2', 'equalto', 'success') | list }}"
+        failed_hosts: "{{ all_status | rejectattr('2', 'equalto', 'success') | list }}"
+
+    - name: Debug - 顯示狀態資訊
+      debug:
         msg:
           - "總主機數: {{ groups['all'] | length }}"
-          - "✅ 成功: {{ all_hosts_status.success | length }} 台 - {{ all_hosts_status.success | join(', ') }}"
-          - "❌ 失敗: {{ all_hosts_status.failed | length }} 台 - {{ all_hosts_status.failed | join(', ') }}"
-          - "❓ 無法連線: {{ all_hosts_status.unreachable | length }} 台 - {{ all_hosts_status.unreachable | join(', ') }}"
+          - "記錄主機數: {{ all_status | length }}"
+          - "成功: {{ success_hosts | length }}"
+          - "失敗: {{ failed_hosts | length }}"
+          - "失敗主機: {{ failed_hosts | map(attribute='1') | list }}"
 
-    - name: 準備失敗/無法連線主機的列表
-      run_once: true
-      ansible.builtin.set_fact:
-        problem_hosts: "{{ all_hosts_status.failed + all_hosts_status.unreachable }}"
-
-    - name: 當所有主機更新成功時，發送通知
-      when: problem_hosts | length == 0
-      run_once: true
-      ansible.builtin.uri:
+    - name: 發送成功通知
+      uri:
         url: "{{ discord_webhook }}"
         method: POST
         body_format: json
         body:
-          content: "✅ **Alpine 系統更新作業成功**"
+          content: "✅ **Alpine 系統更新完成**"
           embeds:
-            - title: "✅ 所有主機均已成功更新"
-              description: "所有 **{{ groups['all'] | length }}** 台主機的 `apk upgrade` 已順利完成。"
-              color: 3066993 # 綠色
+            - title: "Ansible 執行成功"
+              description: "所有 {{ groups['all'] | length }} 台主機已完成系統更新"
+              color: 3066993
               fields:
-                - name: "成功主機"
-                  value: "{{ all_hosts_status.success | length }} 台"
+                - name: "✅ 成功主機"
+                  value: "{{ success_hosts | length }} 台"
                   inline: true
-                - name: "執行時間"
+                - name: "⏱️ 執行時間"
                   value: "{{ ansible_date_time.time }}"
                   inline: true
+                - name: "📅 執行日期"
+                  value: "{{ ansible_date_time.date }}"
+                  inline: true
               timestamp: "{{ ansible_date_time.iso8601 }}"
-        status_code: [200, 204]
+        status_code: 204
+      when: failed_hosts | length == 0
+      become: no
 
-    - name: 當有主機更新失敗或無法連線時，發送通知
-      when: problem_hosts | length > 0
-      run_once: true
-      ansible.builtin.uri:
+    - name: 發送失敗通知
+      uri:
         url: "{{ discord_webhook }}"
         method: POST
         body_format: json
         body:
-          content: "❌ **Alpine 系統更新作業異常**"
+          content: "❌ **Alpine 系統更新失敗**"
           embeds:
-            - title: "⚠️ 部分主機更新失敗或無法連線"
-              description: "共 **{{ problem_hosts | length }}** 台主機需要注意。"
-              color: 15158332 # 紅色
-              fields:
-                - name: "❌ 執行失敗 (Failed)"
-                  value: |
-                    {% if all_hosts_status.failed | length > 0 %}
-                    {{ all_hosts_status.failed | join('\n') }}
-                    {% else %}
-                    無
-                    {% endif %}
-                  inline: false
-                - name: "❓ 無法連線 (Unreachable)"
-                  value: |
-                    {% if all_hosts_status.unreachable | length > 0 %}
-                    {{ all_hosts_status.unreachable | join('\n') }}
-                    {% else %}
-                    無
-                    {% endif %}
-                  inline: false
+            - title: "Ansible 執行失敗"
+              description: |
+                {% for host in failed_hosts %}
+                {{ host[0] }} {{ host[1] }} **{{ host[2] }}**
+                {% endfor %}
+              color: 15158332
               timestamp: "{{ ansible_date_time.iso8601 }}"
-        status_code: [200, 204]
+        status_code: 204
+      when: failed_hosts | length > 0
+      become: no
 
-    - name: 若有任何主機失敗，則將整個 Playbook 標記為失敗
-      when: problem_hosts | length > 0
-      run_once: true
-      ansible.builtin.fail:
-        msg: "共有 {{ problem_hosts | length }} 台主機更新失敗或無法連線：{{ problem_hosts | join(', ') }}"
+    - name: 清理狀態檔案
+      file:
+        path: /tmp/ansible_run_status.txt
+        state: absent
+      become: no
+
+    - name: 標記任務失敗
+      fail:
+        msg: "{{ failed_hosts | length }} 台主機更新失敗: {{ failed_hosts | map(attribute='1') | join(', ') }}"
+      when: failed_hosts | length > 0
