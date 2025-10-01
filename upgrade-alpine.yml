@@ -20,7 +20,7 @@
       ignore_unreachable: yes
       ignore_errors: yes
 
-    # 判斷主機狀態並記錄
+    # 判斷主機狀態
     - name: 判斷主機狀態
       set_fact:
         host_status: >-
@@ -35,16 +35,15 @@
           {% else %}
           success
           {% endif %}
-      ignore_errors: yes
 
-    - name: 記錄主機狀態
+    # 記錄狀態 - 關鍵修正：使用 inventory_hostname 而非 ansible_hostname
+    - name: 記錄主機狀態到檔案
       lineinfile:
         path: /tmp/ansible_run_status.txt
-        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ ansible_host | default(inventory_hostname) }}|{{ host_status }}"
+        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status }}"
         create: yes
       delegate_to: localhost
       become: no
-      ignore_errors: yes
 
 - hosts: localhost
   connection: local
@@ -63,10 +62,18 @@
       set_fact:
         all_status: "{{ status_content.stdout_lines | map('split', '|') | list }}"
         
-    - name: 分類主機
+    - name: 分類主機（修正：正確識別失敗主機）
       set_fact:
-        success_hosts: "{{ all_status | selectattr('3', 'equalto', 'success') | list }}"
-        failed_hosts: "{{ all_status | rejectattr('3', 'equalto', 'success') | list }}"
+        success_hosts: "{{ all_status | selectattr('2', 'equalto', 'success') | list }}"
+        failed_hosts: "{{ all_status | rejectattr('2', 'equalto', 'success') | list }}"
+
+    - name: Debug - 顯示狀態資訊
+      debug:
+        msg:
+          - "總主機數: {{ all_status | length }}"
+          - "成功: {{ success_hosts | length }}"
+          - "失敗: {{ failed_hosts | length }}"
+          - "失敗主機詳情: {{ failed_hosts }}"
 
     - name: 發送成功通知
       uri:
@@ -94,7 +101,7 @@
       when: failed_hosts | length == 0
       become: no
 
-    - name: 發送失敗通知
+    - name: 發送失敗通知（修正：只顯示失敗主機）
       uri:
         url: "{{ discord_webhook }}"
         method: POST
@@ -105,7 +112,7 @@
             - title: "Ansible 執行失敗"
               description: |
                 {% for host in failed_hosts %}
-                {{ host[0] }} {{ host[2] }} **{{ host[3] }}**
+                {{ host[0] }} {{ host[1] }} **{{ host[2] }}**
                 {% endfor %}
               color: 15158332
               timestamp: "{{ ansible_date_time.iso8601 }}"
