@@ -1,6 +1,8 @@
 - hosts: all
   become: yes
   become_user: root
+  vars:
+    discord_webhook: "{{ discord_webhook_url }}"
   tasks:
     - name: Update apk repo and cache on all Alpine boxes
       apk: update_cache=yes
@@ -22,8 +24,8 @@
       include_role:
         name: discord_notify
       vars:
-        discord_webhook_url: "YOUR_WEBHOOK_URL"
-        discord_message: "✅ 部署完成"
+        discord_webhook_url: "{{ discord_webhook }}"
+        discord_message: "✅ Alpine 系統更新完成"
         discord_title: "Ansible 執行成功"
-        discord_description: "所有主機部署完成"
+        discord_description: "所有 Alpine 主機已完成系統更新"
         discord_color: 3066993
