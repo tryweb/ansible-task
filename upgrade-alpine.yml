@@ -15,19 +15,15 @@
           ansible.builtin.apk:
             upgrade: yes
 
-        # 如果上面兩個任務都成功，設定狀態為 success
         - name: 設定主機狀態為 'success'
           ansible.builtin.set_fact:
             host_status: 'success'
       
       rescue:
-        # 如果 block 中有任何任務失敗，設定狀態為 failed
         - name: 設定主機狀態為 'failed'
           ansible.builtin.set_fact:
             host_status: 'failed'
       
-      # ignore_unreachable: yes 會讓無法連線的主機跳過 block/rescue
-      # 我們會在 Play 2 中處理這些主機
       ignore_unreachable: yes
       ignore_errors: yes
 
@@ -42,19 +38,20 @@
     - name: 彙總所有主機的執行狀態
       run_once: true
       ansible.builtin.set_fact:
-        all_hosts_status: |
-          {% set results = {'success': [], 'failed': [], 'unreachable': []} %}
-          {% for host in groups['all'] %}
-            {% set host_vars = hostvars[host] %}
-            {% if host_vars.host_status is defined and host_vars.host_status == 'success' %}
-              {% set _ = results.success.append(host) %}
-            {% elif host_vars.host_status is defined and host_vars.host_status == 'failed' %}
-              {% set _ = results.failed.append(host) %}
-            {% else %}
-              {% set _ = results.unreachable.append(host) %}
-            {% endif %}
-          {% endfor %}
-          {{ results | to_json }} # <--- 關鍵修正：確保輸出為可解析的 JSON
+        # 關鍵修正：移除 '|' 並使用 to_json | from_json 確保類型正確
+        all_hosts_status: >
+          {%- set results = {'success': [], 'failed': [], 'unreachable': []} -%}
+          {%- for host in groups['all'] -%}
+            {%- set host_vars = hostvars[host] -%}
+            {%- if host_vars.host_status is defined and host_vars.host_status == 'success' -%}
+              {%- set _ = results.success.append(host) -%}
+            {%- elif host_vars.host_status is defined and host_vars.host_status == 'failed' -%}
+              {%- set _ = results.failed.append(host) -%}
+            {%- else -%}
+              {%- set _ = results.unreachable.append(host) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ results | to_json | from_json }}
           
     - name: 顯示狀態統計結果 (Debug)
       run_once: true
