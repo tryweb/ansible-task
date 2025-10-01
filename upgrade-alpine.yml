@@ -30,7 +30,7 @@
 - hosts: localhost
   name: "Play 2: 彙總結果並發送 Discord 通知"
   connection: local
-  gather_facts: no
+  gather_facts: yes # <-- 關鍵修正：從 no 改為 yes
   vars:
     discord_webhook: "{{ discord_webhook_url }}"
   
@@ -38,7 +38,6 @@
     - name: 彙總所有主機的執行狀態
       run_once: true
       ansible.builtin.set_fact:
-        # 關鍵修正：移除 '|' 並使用 to_json | from_json 確保類型正確
         all_hosts_status: >
           {%- set results = {'success': [], 'failed': [], 'unreachable': []} -%}
           {%- for host in groups['all'] -%}
