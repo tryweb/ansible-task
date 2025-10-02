@@ -7,10 +7,14 @@
 
   tasks:
     - name: Update apt repo and cache on all Debian/Ubuntu boxes
-      apt: update_cache=yes force_apt_get=yes cache_valid_time=3600
+      register: update_result
+      apt: 
+        update_cache: yes 
+        force_apt_get: yes 
+        cache_valid_time: 3600
 
     - name: Ansible apt to install multiple packages
-      register: updatesys
+      register: install_result
       apt:
         update_cache: yes
         name:
@@ -20,19 +24,26 @@
         state: present
         
     - name: Upgrade all packages on servers
-      apt: upgrade=dist force_apt_get=yes
+      register: upgrade_result
+      apt: 
+        upgrade: dist 
+        force_apt_get: yes
 
     - name: Ansible apt autoremove packages
+      register: autoremove_result
       apt:
         autoremove: yes
         
-    # 判斷主機狀態（移除多餘空格）
+    # 判斷主機狀態
     - name: 判斷主機狀態
       set_fact:
         host_status: >-
-          {% if update_result.unreachable is defined and update_result.unreachable %}unreachable{% elif upgrade_result.unreachable is defined and upgrade_result.unreachable %}unreachable{% elif update_result.failed is defined and update_result.failed %}failed{% elif upgrade_result.failed is defined and upgrade_result.failed %}failed{% else %}success{% endif %}
+          {% if update_result.failed | default(false) or 
+                install_result.failed | default(false) or 
+                upgrade_result.failed | default(false) or 
+                autoremove_result.failed | default(false) %}failed{% else %}success{% endif %}
 
-    # 記錄狀態（注意：使用 trim 移除空格）
+    # 記錄狀態
     - name: 記錄主機狀態到檔案
       lineinfile:
         path: /tmp/ansible_run_status.txt
