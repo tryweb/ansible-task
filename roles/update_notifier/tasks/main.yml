@@ -25,6 +25,7 @@
       delegate_to: localhost
       delegate_facts: true
       run_once: true
+      when: unreachable_hosts | length > 0
 
     - name: 為 unreachable 主機補充記錄
       lineinfile:

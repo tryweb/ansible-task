@@ -51,6 +51,7 @@
         create: yes
       delegate_to: localhost
       become: no
+      throttle: 1
 
 - hosts: localhost
   connection: local
