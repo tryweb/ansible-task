@@ -19,10 +19,17 @@
       set_fact:
         unreachable_hosts: "{{ expected_hosts | difference(recorded_hosts) }}"
 
+    - name: 取得本地時間
+      setup:
+        filter: ansible_date_time
+      delegate_to: localhost
+      delegate_facts: true
+      run_once: true
+
     - name: 為 unreachable 主機補充記錄
       lineinfile:
         path: /tmp/ansible_run_status.txt
-        line: "{{ ansible_date_time.iso8601 }}|{{ item }}|unreachable"
+        line: "{{ hostvars['localhost']['ansible_date_time']['iso8601'] }}|{{ item }}|unreachable"
         create: yes
       loop: "{{ unreachable_hosts }}"
       when: unreachable_hosts | length > 0
@@ -42,6 +49,11 @@
   set_fact:
     success_hosts: "{{ all_status | selectattr('2', 'equalto', 'success') | list }}"
     failed_hosts: "{{ all_status | rejectattr('2', 'equalto', 'success') | list }}"
+
+- name: 取得本地時間用於通知
+  setup:
+    filter: ansible_date_time
+  run_once: true
 
 - name: Debug - 顯示狀態資訊
   debug:
@@ -73,6 +85,8 @@
             - name: "📅 執行日期"
               value: "{{ ansible_date_time.date }}"
               inline: true
+          footer:
+            text: "今天 {{ ansible_date_time.time }}"
           timestamp: "{{ ansible_date_time.iso8601 }}"
     status_code: 204
   when: failed_hosts | length == 0
@@ -92,6 +106,8 @@
             {{ host[0] }} {{ host[1] }} **{{ host[2] }}**
             {% endfor %}
           color: 15158332
+          footer:
+            text: "今天 {{ ansible_date_time.time }}"
           timestamp: "{{ ansible_date_time.iso8601 }}"
     status_code: 204
   when: failed_hosts | length > 0
