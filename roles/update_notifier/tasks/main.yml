@@ -35,7 +35,7 @@
     - name: 為 unreachable 主機補充記錄
       lineinfile:
         path: "{{ status_file }}"
-        line: "{{ hostvars['localhost']['ansible_date_time']['iso8601'] }}|{{ item }}|unreachable"
+        line: "{{ hostvars['localhost']['ansible_date_time']['iso8601'] }}|{{ item }}|unreachable|False"
         create: yes
       loop: "{{ unreachable_hosts }}"
       when: unreachable_hosts | length > 0
@@ -56,6 +56,9 @@
   set_fact:
     success_hosts: "{{ all_status | selectattr('2', 'equalto', 'success') | list }}"
     failed_hosts: "{{ all_status | rejectattr('2', 'equalto', 'success') | list }}"
+    # 進一步分類成功的主機：有更新 vs 無更新
+    updated_hosts: "{{ all_status | selectattr('2', 'equalto', 'success') | selectattr('3', 'equalto', 'True') | list }}"
+    no_update_hosts: "{{ all_status | selectattr('2', 'equalto', 'success') | selectattr('3', 'equalto', 'False') | list }}"
 
 - name: 取得本地時間用於通知
   setup:
@@ -106,8 +109,11 @@
       - "總主機數: {{ groups['all'] | length }}"
       - "記錄主機數: {{ all_status | length }}"
       - "成功: {{ success_hosts | length }}"
+      - "  - 有更新: {{ updated_hosts | length }}"
+      - "  - 無更新: {{ no_update_hosts | length }}"
       - "失敗: {{ failed_hosts | length }}"
       - "失敗主機: {{ failed_hosts | map(attribute='1') | list }}"
+      - "有更新主機: {{ updated_hosts | map(attribute='1') | list }}"
 
 - name: 發送成功通知
   uri:
@@ -121,8 +127,11 @@
           description: "所有 {{ groups['all'] | length }} 台主機已完成系統更新"
           color: 3066993
           fields:
-            - name: "✅ 成功主機"
-              value: "{{ success_hosts | length }} 台"
+            - name: "📦 有套件更新"
+              value: "{{ updated_hosts | length }} 台"
+              inline: true
+            - name: "✓ 已是最新"
+              value: "{{ no_update_hosts | length }} 台"
               inline: true
             - name: "⏱️ 執行時間"
               value: "{{ local_time_only }}"
@@ -151,6 +160,16 @@
             {{ host[0] }} {{ host[1] }} **{{ host[2] }}**
             {% endfor %}
           color: 15158332
+          fields:
+            - name: "📦 有套件更新"
+              value: "{{ updated_hosts | length }} 台"
+              inline: true
+            - name: "✓ 已是最新"
+              value: "{{ no_update_hosts | length }} 台"
+              inline: true
+            - name: "❌ 失敗/無法連線"
+              value: "{{ failed_hosts | length }} 台"
+              inline: true
           footer:
             text: "今天 {{ local_time_only }}"
           timestamp: "{{ ansible_date_time.iso8601 }}"

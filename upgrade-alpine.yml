@@ -36,12 +36,13 @@
       set_fact:
         host_status: >-
           {% if update_result.unreachable | default(false) or upgrade_result.unreachable | default(false) %}unreachable{% elif update_result.failed | default(false) or upgrade_result.failed | default(false) %}failed{% else %}success{% endif %}
+        has_updates: "{{ upgrade_result.changed | default(false) }}"
 
     # 記錄狀態（使用 throttle 防止競態條件）
     - name: 記錄主機狀態到檔案
       lineinfile:
         path: "{{ status_file }}"
-        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status | trim }}"
+        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status | trim }}|{{ has_updates }}"
         create: yes
       delegate_to: localhost
       become: no
