@@ -79,17 +79,25 @@
     msg: "{{ timezone_debug.stdout_lines }}"
   run_once: true
 
-- name: 取得系統本地時間（使用執行主機時區）
+- name: 取得指定時區的本地時間
   shell: |
-    date '+%Y-%m-%d %H:%M:%S'
+    TZ='{{ display_timezone | default("Asia/Taipei") }}' date '+%Y-%m-%d %H:%M:%S %Z'
   register: local_datetime
   changed_when: false
+  run_once: true
+
+- name: Debug - 顯示時間資訊
+  debug:
+    msg:
+      - "原始時間輸出: {{ local_datetime.stdout }}"
+      - "配置的時區: {{ display_timezone | default('Asia/Taipei') }}"
   run_once: true
 
 - name: 解析本地時間
   set_fact:
     local_time_only: "{{ local_datetime.stdout.split()[1] }}"
     local_date: "{{ local_datetime.stdout.split()[0] }}"
+    timezone_name: "{{ local_datetime.stdout.split()[2] if local_datetime.stdout.split() | length > 2 else '' }}"
   run_once: true
 
 - name: Debug - 顯示狀態資訊
