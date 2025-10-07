@@ -53,13 +53,10 @@
   vars:
     discord_webhook: "{{ discord_webhook_url }}"
     status_file: "{{ playbook_dir }}/.ansible_status/run_status.txt"
-    # 設定顯示時區，預設為 Asia/Taipei（台北時間 UTC+8）
-    # 可透過 --extra-vars "display_timezone=Asia/Tokyo" 覆寫
-    notification_timezone: "{{ display_timezone | default('Asia/Taipei') }}"
   
   roles:
     - role: update_notifier
       vars:
         notification_title: "Alpine"
         status_file_path: "{{ status_file }}"
-        display_timezone: "{{ notification_timezone }}"
+        notification_timezone: "{{ display_timezone | default('Asia/Taipei') }}"

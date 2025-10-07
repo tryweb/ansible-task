@@ -81,7 +81,7 @@
 
 - name: 取得指定時區的本地時間
   shell: |
-    TZ='{{ display_timezone | default("Asia/Taipei") }}' date '+%Y-%m-%d %H:%M:%S %Z'
+    TZ='{{ notification_timezone | default("Asia/Taipei") }}' date '+%Y-%m-%d %H:%M:%S %Z'
   register: local_datetime
   changed_when: false
   run_once: true
@@ -90,7 +90,7 @@
   debug:
     msg:
       - "原始時間輸出: {{ local_datetime.stdout }}"
-      - "配置的時區: {{ display_timezone | default('Asia/Taipei') }}"
+      - "配置的時區: {{ notification_timezone | default('Asia/Taipei') }}"
   run_once: true
 
 - name: 解析本地時間
