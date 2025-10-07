@@ -20,11 +20,11 @@
       ignore_unreachable: yes
       ignore_errors: yes
 
-    # 判斷主機狀態（移除多餘空格）
+    # 判斷主機狀態
     - name: 判斷主機狀態
       set_fact:
         host_status: >-
-          {% if update_result.unreachable is defined and update_result.unreachable %}unreachable{% elif upgrade_result.unreachable is defined and upgrade_result.unreachable %}unreachable{% elif update_result.failed is defined and update_result.failed %}failed{% elif upgrade_result.failed is defined and upgrade_result.failed %}failed{% else %}success{% endif %}
+          {% if update_result.unreachable | default(false) or upgrade_result.unreachable | default(false) %}unreachable{% elif update_result.failed | default(false) or upgrade_result.failed | default(false) %}failed{% else %}success{% endif %}
 
     # 記錄狀態（注意：使用 trim 移除空格）
     - name: 記錄主機狀態到檔案
