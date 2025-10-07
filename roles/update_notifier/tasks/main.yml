@@ -62,6 +62,19 @@
     filter: ansible_date_time
   run_once: true
 
+- name: 取得系統本地時間（使用執行主機時區）
+  shell: |
+    date '+%Y-%m-%d %H:%M:%S'
+  register: local_datetime
+  changed_when: false
+  run_once: true
+
+- name: 解析本地時間
+  set_fact:
+    local_time_only: "{{ local_datetime.stdout.split()[1] }}"
+    local_date: "{{ local_datetime.stdout.split()[0] }}"
+  run_once: true
+
 - name: Debug - 顯示狀態資訊
   debug:
     msg:
@@ -87,13 +100,13 @@
               value: "{{ success_hosts | length }} 台"
               inline: true
             - name: "⏱️ 執行時間"
-              value: "{{ ansible_date_time.time }}"
+              value: "{{ local_time_only }}"
               inline: true
             - name: "📅 執行日期"
-              value: "{{ ansible_date_time.date }}"
+              value: "{{ local_date }}"
               inline: true
           footer:
-            text: "今天 {{ ansible_date_time.time }}"
+            text: "今天 {{ local_time_only }}"
           timestamp: "{{ ansible_date_time.iso8601 }}"
     status_code: 204
   when: failed_hosts | length == 0
@@ -114,7 +127,7 @@
             {% endfor %}
           color: 15158332
           footer:
-            text: "今天 {{ ansible_date_time.time }}"
+            text: "今天 {{ local_time_only }}"
           timestamp: "{{ ansible_date_time.iso8601 }}"
     status_code: 204
   when: failed_hosts | length > 0
