@@ -3,22 +3,33 @@
   become_user: root
   vars:
     discord_webhook: "{{ discord_webhook_url }}"
+    status_file: "{{ playbook_dir }}/.ansible_status/run_status.txt"
   gather_facts: yes
   
   tasks:
+    # 確保狀態目錄存在
+    - name: 確保狀態目錄存在
+      file:
+        path: "{{ playbook_dir }}/.ansible_status"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      run_once: true
+      become: no
+
     - name: Update apk repo and cache on all Alpine boxes
-      apk: 
+      apk:
         update_cache: yes
       register: update_result
       ignore_unreachable: yes
-      ignore_errors: yes
+      failed_when: false
 
     - name: Upgrade all packages on servers
-      apk: 
+      apk:
         upgrade: yes
       register: upgrade_result
       ignore_unreachable: yes
-      ignore_errors: yes
+      failed_when: false
 
     # 判斷主機狀態
     - name: 判斷主機狀態
@@ -26,22 +37,25 @@
         host_status: >-
           {% if update_result.unreachable | default(false) or upgrade_result.unreachable | default(false) %}unreachable{% elif update_result.failed | default(false) or upgrade_result.failed | default(false) %}failed{% else %}success{% endif %}
 
-    # 記錄狀態（注意：使用 trim 移除空格）
+    # 記錄狀態（使用 throttle 防止競態條件）
     - name: 記錄主機狀態到檔案
       lineinfile:
-        path: /tmp/ansible_run_status.txt
+        path: "{{ status_file }}"
         line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status | trim }}"
         create: yes
       delegate_to: localhost
       become: no
+      throttle: 1
 
 - hosts: localhost
   connection: local
   gather_facts: yes
   vars:
     discord_webhook: "{{ discord_webhook_url }}"
+    status_file: "{{ playbook_dir }}/.ansible_status/run_status.txt"
   
   roles:
     - role: update_notifier
       vars:
         notification_title: "Alpine"
+        status_file_path: "{{ status_file }}"

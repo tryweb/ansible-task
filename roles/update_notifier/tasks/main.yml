@@ -1,4 +1,9 @@
 ---
+# 設定預設檔案路徑（向後相容）
+- name: 設定狀態檔案路徑
+  set_fact:
+    status_file: "{{ status_file_path | default('/tmp/ansible_run_status.txt') }}"
+
 - name: 檢查並記錄 unreachable 主機
   block:
     - name: 取得所有應該執行的主機
@@ -6,7 +11,7 @@
         expected_hosts: "{{ groups['all'] }}"
     
     - name: 讀取已記錄的主機
-      shell: "cat /tmp/ansible_run_status.txt 2>/dev/null | cut -d'|' -f2 || echo ''"
+      shell: "cat '{{ status_file }}' 2>/dev/null | cut -d'|' -f2 || echo ''"
       register: recorded_hosts_raw
       changed_when: false
       become: no
@@ -29,15 +34,16 @@
 
     - name: 為 unreachable 主機補充記錄
       lineinfile:
-        path: /tmp/ansible_run_status.txt
+        path: "{{ status_file }}"
         line: "{{ hostvars['localhost']['ansible_date_time']['iso8601'] }}|{{ item }}|unreachable"
         create: yes
       loop: "{{ unreachable_hosts }}"
       when: unreachable_hosts | length > 0
       become: no
+      throttle: 1
 
 - name: 讀取完整狀態檔案
-  shell: "cat /tmp/ansible_run_status.txt 2>/dev/null || echo ''"
+  shell: "cat '{{ status_file }}' 2>/dev/null || echo ''"
   register: status_content
   changed_when: false
   become: no
@@ -116,7 +122,7 @@
 
 - name: 清理狀態檔案
   file:
-    path: /tmp/ansible_run_status.txt
+    path: "{{ status_file }}"
     state: absent
   become: no
 

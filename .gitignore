@@ -1,0 +1,26 @@
+# Ansible 狀態檔案目錄
+.ansible_status/
+
+# 臨時檔案
+*.tmp
+*.log
+
+# Ansible 緩存
+.ansible/
+*.retry
+
+# Python 相關
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE 相關
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS 相關
+.DS_Store
+Thumbs.db
