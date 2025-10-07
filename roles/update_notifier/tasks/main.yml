@@ -62,6 +62,23 @@
     filter: ansible_date_time
   run_once: true
 
+- name: Debug - 檢查執行環境的時區設定
+  shell: |
+    echo "=== 時區資訊 ==="
+    echo "date 命令輸出: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+    echo "TZ 環境變數: ${TZ:-未設定}"
+    echo "系統時區檔: $(readlink -f /etc/localtime 2>/dev/null || echo '無法讀取')"
+    echo "UTC 時間: $(date -u '+%Y-%m-%d %H:%M:%S')"
+    echo "==============="
+  register: timezone_debug
+  changed_when: false
+  run_once: true
+
+- name: Debug - 顯示時區資訊
+  debug:
+    msg: "{{ timezone_debug.stdout_lines }}"
+  run_once: true
+
 - name: 取得系統本地時間（使用執行主機時區）
   shell: |
     date '+%Y-%m-%d %H:%M:%S'
