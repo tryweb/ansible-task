@@ -139,8 +139,6 @@
             - name: "📅 執行日期"
               value: "{{ local_date }}"
               inline: true
-          footer:
-            text: "今天 {{ local_time_only }}"
           timestamp: "{{ ansible_date_time.iso8601 }}"
     status_code: 204
   when: failed_hosts | length == 0
@@ -170,8 +168,6 @@
             - name: "❌ 失敗/無法連線"
               value: "{{ failed_hosts | length }} 台"
               inline: true
-          footer:
-            text: "今天 {{ local_time_only }}"
           timestamp: "{{ ansible_date_time.iso8601 }}"
     status_code: 204
   when: failed_hosts | length > 0
