@@ -34,12 +34,13 @@
       set_fact:
         host_status: >-
           {% if update_result.unreachable is defined and update_result.unreachable %}unreachable{% elif upgrade_result.unreachable is defined and upgrade_result.unreachable %}unreachable{% elif update_result.failed is defined and update_result.failed %}failed{% elif upgrade_result.failed is defined and upgrade_result.failed %}failed{% else %}success{% endif %}
+        has_updates: "True"
 
-    # 記錄狀態（注意：使用 trim 移除空格）
+    # 記錄狀態（注意：使用 trim 移除空格，並加入 has_updates 欄位）
     - name: 記錄主機狀態到檔案
       lineinfile:
         path: /tmp/ansible_run_status.txt
-        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status | trim }}"
+        line: "{{ ansible_date_time.iso8601 }}|{{ inventory_hostname }}|{{ host_status | trim }}|{{ has_updates }}"
         create: yes
       delegate_to: localhost
       become: no
