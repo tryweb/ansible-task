@@ -124,7 +124,7 @@
       content: "✅ **{{ notification_title }} 系統更新完成**"
       embeds:
         - title: "Ansible 執行成功"
-          description: "所有 {{ groups['all'] | length }} 台主機已完成系統更新"
+          description: "所有 {{ all_status | length }} 台主機已完成系統更新"
           color: 3066993
           fields:
             - name: "📦 有套件更新"
