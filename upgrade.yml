@@ -86,6 +86,6 @@
   roles:
     - role: update_notifier
       vars:
-        notification_title: "Proxmox"
+        notification_title: "Debian/Ubuntu/Proxmox"
         status_file_path: "{{ status_file }}"
         notification_timezone: "{{ display_timezone | default('Asia/Taipei') }}"
