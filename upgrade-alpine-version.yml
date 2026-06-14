@@ -8,4 +8,6 @@
       shell:
         cmd: curl -sSL https://raw.githubusercontent.com/tryweb/docker-compose/main/scripts/alpine_upgrade.sh | sh -s -- --silent
       register: script_result
+      ignore_unreachable: yes
+      failed_when: false
       changed_when: script_result.rc == 0
