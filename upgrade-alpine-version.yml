@@ -1,0 +1,11 @@
+- hosts: all
+  become: yes
+  become_user: root
+  gather_facts: yes
+
+  tasks:
+    - name: 透過 curl pipe sh 執行 Alpine upgrade 腳本
+      shell:
+        cmd: curl -sSL https://raw.githubusercontent.com/tryweb/docker-compose/main/scripts/alpine_upgrade.sh | sh -s -- --silent
+      register: script_result
+      changed_when: script_result.rc == 0
