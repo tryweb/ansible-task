@@ -6,8 +6,7 @@
   tasks:
     - name: 透過 curl pipe sh 執行 Alpine upgrade 腳本
       shell:
-        cmd: curl -sSL https://raw.githubusercontent.com/tryweb/docker-compose/main/scripts/alpine_upgrade.sh | sh -s -- --silent
-        timeout: 3600
+        cmd: timeout 3600 curl -sSL https://raw.githubusercontent.com/tryweb/docker-compose/main/scripts/alpine_upgrade.sh | sh -s -- --silent
       register: script_result
       ignore_unreachable: yes
       failed_when: false
