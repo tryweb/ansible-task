@@ -4,6 +4,11 @@
   gather_facts: yes
 
   tasks:
+    - name: 確保 curl 已安裝
+      apk:
+        name: curl
+        state: present
+
     - name: 透過 curl pipe sh 執行 Alpine upgrade 腳本
       shell:
         cmd: timeout 3600 curl -sSL https://raw.githubusercontent.com/tryweb/docker-compose/main/scripts/alpine_upgrade.sh | sh -s -- --silent
