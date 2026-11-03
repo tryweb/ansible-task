@@ -16,8 +16,8 @@
       ansible.builtin.debug:
         msg:
           host: "{{ inventory_hostname }}"
-          hostname: "{{ os_audit.ansible_facts.hostname | default('unknown') }}"
-          distribution: "{{ os_audit.ansible_facts.distribution | default('unknown') }}"
-          version: "{{ os_audit.ansible_facts.distribution_version | default('unknown') }}"
-          os_family: "{{ os_audit.ansible_facts.os_family | default('unknown') }}"
-          architecture: "{{ os_audit.ansible_facts.architecture | default('unknown') }}"
+          hostname: "{{ os_audit.ansible_facts.hostname | default(os_audit.ansible_facts.ansible_hostname | default('unknown')) }}"
+          distribution: "{{ os_audit.ansible_facts.distribution | default(os_audit.ansible_facts.ansible_distribution | default('unknown')) }}"
+          version: "{{ os_audit.ansible_facts.distribution_version | default(os_audit.ansible_facts.ansible_distribution_version | default('unknown')) }}"
+          os_family: "{{ os_audit.ansible_facts.os_family | default(os_audit.ansible_facts.ansible_os_family | default('unknown')) }}"
+          architecture: "{{ os_audit.ansible_facts.architecture | default(os_audit.ansible_facts.ansible_architecture | default('unknown')) }}"
