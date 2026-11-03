@@ -1,0 +1,22 @@
+---
+- name: Read-only operating system inventory audit
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Gather minimal platform facts
+      ansible.builtin.setup:
+        gather_subset:
+          - "!all"
+          - "!min"
+          - platform
+      register: os_audit
+
+    - name: Report host operating system
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          hostname: "{{ os_audit.ansible_facts.hostname | default('unknown') }}"
+          distribution: "{{ os_audit.ansible_facts.distribution | default('unknown') }}"
+          version: "{{ os_audit.ansible_facts.distribution_version | default('unknown') }}"
+          os_family: "{{ os_audit.ansible_facts.os_family | default('unknown') }}"
+          architecture: "{{ os_audit.ansible_facts.architecture | default('unknown') }}"
