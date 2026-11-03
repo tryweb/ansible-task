@@ -8,6 +8,7 @@
         gather_subset:
           - "!all"
           - "!min"
+          - distribution
           - platform
       register: os_audit
 
